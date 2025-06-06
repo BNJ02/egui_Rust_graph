@@ -27,6 +27,7 @@ struct Task {
     freq_end: f64,       // Fréquence de fin (MHz)
     time_start: f64,     // Temps de début (secondes)
     time_end: f64,       // Temps de fin (secondes)
+    color: egui::Color32, // Couleur de la tâche
 }
 
 // Structure principale de l'application
@@ -45,6 +46,7 @@ impl Default for MyApp {
                     freq_end: 4.2,
                     time_start: 2.0,
                     time_end: 8.0,
+                    color: egui::Color32::from_rgba_unmultiplied(255, 0, 0, 255), // Rouge
                 },
                 Task {
                     name: "Transmission radio".into(),
@@ -52,6 +54,7 @@ impl Default for MyApp {
                     freq_end: 3.3,
                     time_start: 1.0,
                     time_end: 4.5,
+                    color: egui::Color32::from_rgba_unmultiplied(0, 0, 255, 200), // Bleu
                 },
                 Task {
                     name: "Idle / Sleep mode".into(),
@@ -59,6 +62,7 @@ impl Default for MyApp {
                     freq_end: 5.7,
                     time_start: 0.0,
                     time_end: 10.0,
+                    color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
                 },
             ],
         }
@@ -96,8 +100,8 @@ impl eframe::App for MyApp {
                         ];
                         // Création du polygone (rectangle) avec transparence
                         let polygon = Polygon::new(PlotPoints::from(rectangle))
-                            .name(&task.name);
-                            // .fill_color(egui::Color32::from_rgba_unmultiplied(0, 0, 255, 77)); // Blue with transparency
+                            .name(&task.name)
+                            .fill_color(task.color);
 
                         // Ajout du polygone au graphique
                         plot_ui.polygon(polygon);
