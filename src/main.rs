@@ -30,6 +30,7 @@ struct Task {
 // Structure principale de l'application
 struct MyApp {
     tasks: Vec<Task>,
+    plot_bounds_x: Option<(f64, f64)>, // Limites X du graphe principal
 }
 
 impl Default for MyApp {
@@ -61,6 +62,7 @@ impl Default for MyApp {
                     color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
                 },
             ],
+            plot_bounds_x: None, // Initialisation des limites X
         }
     }
 }
@@ -68,14 +70,16 @@ impl Default for MyApp {
 // Affichage principal
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Affiche la zone centrale de l'interface
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Diagramme Fréquence / Temps");
 
-            // Scroll vertical si nécessaire
             egui::ScrollArea::vertical().show(ui, |ui| {
-                // --- Graphe principal avec hauteur limitée ---
-                ui.allocate_ui(egui::vec2(ui.available_width(), 300.0), |ui| {
+                let total_height = ui.available_height();
+                let main_height = total_height * 0.8;
+                let mini_height = total_height * 0.18;
+
+                // --- Graphe principal ---
+                ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
                     Plot::new("frequence_temps_plot_main")
                         .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
                         .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
@@ -84,6 +88,10 @@ impl eframe::App for MyApp {
                         .include_y(0.0)
                         .include_y(10.0)
                         .show(ui, |plot_ui| {
+                            // Lire les bornes X visibles à la fin du tracé
+                            let bounds = plot_ui.plot_bounds();
+                            self.plot_bounds_x = Some((bounds.min()[0], bounds.max()[0]));
+
                             for task in &self.tasks {
                                 let rect = vec![
                                     [task.freq_start, task.time_start],
@@ -102,29 +110,40 @@ impl eframe::App for MyApp {
 
                 ui.separator();
 
-                // --- Graphe secondaire plus petit ---
-                ui.allocate_ui(egui::vec2(ui.available_width(), 120.0), |ui| {
-                    Plot::new("frequence_temps_plot_mini")
-                        .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
-                        .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
-                        .include_x(2.0)
-                        .include_x(6.0)
+                // --- Graphe secondaire ---
+                ui.allocate_ui(egui::vec2(ui.available_width(), mini_height), |ui| {
+                    let mut mini_plot = Plot::new("frequence_temps_plot_mini")
+                        .show_axes([false, false]) // Masque les axes
                         .include_y(0.0)
-                        .include_y(10.0)
-                        .show(ui, |plot_ui| {
-                            for task in &self.tasks {
-                                let rect = vec![
-                                    [task.freq_start, task.time_start],
-                                    [task.freq_end, task.time_start],
-                                    [task.freq_end, task.time_end],
-                                    [task.freq_start, task.time_end],
-                                ];
-                                plot_ui.polygon(
-                                    Polygon::new(PlotPoints::from(rect))
-                                        .fill_color(task.color),
-                                );
-                            }
-                        });
+                        .include_y(10.0);
+
+                    // Applique les limites X du graphe principal si disponibles
+                    /*if let Some((x_min, x_max)) = self.plot_bounds_x {
+                        mini_plot = mini_plot.set_plot_bounds(
+                            egui_plot::PlotBounds::from_min_max([x_min, 0.0], [x_max, 10.0]),
+                        );
+                    }*/
+                    if let Some((x_min, x_max)) = self.plot_bounds_x {
+                        mini_plot = mini_plot
+                            .include_x(x_min)
+                            .include_x(x_max);
+                    }
+
+
+                    mini_plot.show(ui, |plot_ui| {
+                        for task in &self.tasks {
+                            let rect = vec![
+                                [task.freq_start, task.time_start],
+                                [task.freq_end, task.time_start],
+                                [task.freq_end, task.time_end],
+                                [task.freq_start, task.time_end],
+                            ];
+                            plot_ui.polygon(
+                                Polygon::new(PlotPoints::from(rect))
+                                    .fill_color(task.color),
+                            );
+                        }
+                    });
                 });
             });
         });
