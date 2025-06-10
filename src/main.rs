@@ -3,16 +3,13 @@ use eframe::egui;
 use egui_plot::{Plot, PlotPoints, Polygon};
 
 fn main() -> eframe::Result<()> {
-    // Initialise le logger pour capturer les logs dans le terminal (utile en debug)
     env_logger::init();
 
-    // Configuration de la fenêtre principale
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 480.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([640.0, 600.0]),
         ..Default::default()
     };
 
-    // Démarrage de l'application graphique
     eframe::run_native(
         "Gantt Fréquence/Temps",     // Titre de la fenêtre
         options,                     // Options graphiques
@@ -32,10 +29,9 @@ struct Task {
 
 // Structure principale de l'application
 struct MyApp {
-    tasks: Vec<Task>,    // Liste des tâches à afficher
+    tasks: Vec<Task>,
 }
 
-// Initialisation par défaut avec 3 tâches prédéfinies
 impl Default for MyApp {
     fn default() -> Self {
         Self {
@@ -69,44 +65,68 @@ impl Default for MyApp {
     }
 }
 
-// Implémentation de l'interface utilisateur avec egui
+// Affichage principal
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Affiche la zone centrale de l'interface
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Diagramme Fréquence / Temps"); // Titre de la section
+            ui.heading("Diagramme Fréquence / Temps");
 
-            // Création du graphique Plot
-            Plot::new("frequence_temps_plot")
-                // Format des valeurs affichées sur l'axe X (fréquence)
-                .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
-                // Format des valeurs affichées sur l'axe Y (temps)
-                .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
-                // Plage de fréquences (axe X)
-                .include_x(2.0)
-                .include_x(6.0)
-                // Plage de temps (axe Y)
-                .include_y(0.0)
-                .include_y(10.0)
-                // Affichage du graphique dans l'interface
-                .show(ui, |plot_ui| {
-                    for task in &self.tasks {
-                        // Définition du rectangle pour chaque tâche avec 4 sommets (sens horaire)
-                        let rectangle = vec![
-                            [task.freq_start, task.time_start],
-                            [task.freq_end, task.time_start],
-                            [task.freq_end, task.time_end],
-                            [task.freq_start, task.time_end],
-                        ];
-                        // Création du polygone (rectangle) avec transparence
-                        let polygon = Polygon::new(PlotPoints::from(rectangle))
-                            .name(&task.name)
-                            .fill_color(task.color);
-
-                        // Ajout du polygone au graphique
-                        plot_ui.polygon(polygon);
-                    }
+            // Scroll vertical si nécessaire
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                // --- Graphe principal avec hauteur limitée ---
+                ui.allocate_ui(egui::vec2(ui.available_width(), 300.0), |ui| {
+                    Plot::new("frequence_temps_plot_main")
+                        .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
+                        .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
+                        .include_x(2.0)
+                        .include_x(6.0)
+                        .include_y(0.0)
+                        .include_y(10.0)
+                        .show(ui, |plot_ui| {
+                            for task in &self.tasks {
+                                let rect = vec![
+                                    [task.freq_start, task.time_start],
+                                    [task.freq_end, task.time_start],
+                                    [task.freq_end, task.time_end],
+                                    [task.freq_start, task.time_end],
+                                ];
+                                plot_ui.polygon(
+                                    Polygon::new(PlotPoints::from(rect))
+                                        .name(&task.name)
+                                        .fill_color(task.color),
+                                );
+                            }
+                        });
                 });
+
+                ui.separator();
+
+                // --- Graphe secondaire plus petit ---
+                ui.allocate_ui(egui::vec2(ui.available_width(), 120.0), |ui| {
+                    Plot::new("frequence_temps_plot_mini")
+                        .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
+                        .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
+                        .include_x(2.0)
+                        .include_x(6.0)
+                        .include_y(0.0)
+                        .include_y(10.0)
+                        .show(ui, |plot_ui| {
+                            for task in &self.tasks {
+                                let rect = vec![
+                                    [task.freq_start, task.time_start],
+                                    [task.freq_end, task.time_start],
+                                    [task.freq_end, task.time_end],
+                                    [task.freq_start, task.time_end],
+                                ];
+                                plot_ui.polygon(
+                                    Polygon::new(PlotPoints::from(rect))
+                                        .fill_color(task.color),
+                                );
+                            }
+                        });
+                });
+            });
         });
     }
 }
