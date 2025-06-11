@@ -31,6 +31,7 @@ struct Task {
 struct MyApp {
     tasks: Vec<Task>,
     plot_bounds_x: Option<(f64, f64)>, // Limites X du graphe principal
+    last_bounds_x: Option<(f64, f64)>, // Dernières limites X utilisées
 }
 
 impl Default for MyApp {
@@ -62,7 +63,8 @@ impl Default for MyApp {
                     color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
                 },
             ],
-            plot_bounds_x: None, // Initialisation des limites X
+            plot_bounds_x: Some((2.0, 6.0)), // Initialisation des limites X
+            last_bounds_x: Some((0.0, 10.0)), // Dernières limites X utilisées
         }
     }
 }
@@ -81,6 +83,7 @@ impl eframe::App for MyApp {
                 // --- Graphe principal ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
                     Plot::new("frequence_temps_plot_main")
+                        .link_axis("groupe_x", true, false)
                         .x_axis_formatter(|x, _, _| format!("{:.1} MHz", x.value))
                         .y_axis_formatter(|y, _, _| format!("{:.1} s", y.value))
                         .include_x(2.0)
@@ -90,7 +93,12 @@ impl eframe::App for MyApp {
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
-                            self.plot_bounds_x = Some((bounds.min()[0], bounds.max()[0]));
+                            let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
+                            // Vérifier si les bornes X ont changé
+                            if self.last_bounds_x != Some(new_bounds_x) {
+                                self.plot_bounds_x = Some(new_bounds_x);
+                                self.last_bounds_x = Some(new_bounds_x);
+                            }
 
                             for task in &self.tasks {
                                 let rect = vec![
@@ -108,29 +116,27 @@ impl eframe::App for MyApp {
                         });
                 });
 
+                // --- Espace entre les deux graphiques ---
                 ui.separator();
 
                 // --- Graphe secondaire ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), mini_height), |ui| {
-                    let mut mini_plot = Plot::new("frequence_temps_plot_mini")
-                        .show_axes([false, false]) // Masque les axes
-                        .include_y(0.0)
-                        .include_y(10.0);
+                    Plot::new("frequence_temps_plot_mini")
+                        .link_axis("groupe_x", true, false)
+                        .show_axes([false, true]) // ← axe des ordonées visible, mais
+                        .y_axis_formatter(|_, _, _| "".to_owned())
+                        .include_x(2.0)
+                        .include_x(6.0)
+                        .show(ui, |plot_ui| {
+                        // Lire les bornes X visibles à la fin du tracé
+                        let bounds = plot_ui.plot_bounds();
+                        let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
+                        // Vérifier si les bornes X ont changé
+                        if self.last_bounds_x != Some(new_bounds_x) {
+                            self.plot_bounds_x = Some(new_bounds_x);
+                            self.last_bounds_x = Some(new_bounds_x);
+                        }
 
-                    // Applique les limites X du graphe principal si disponibles
-                    /*if let Some((x_min, x_max)) = self.plot_bounds_x {
-                        mini_plot = mini_plot.set_plot_bounds(
-                            egui_plot::PlotBounds::from_min_max([x_min, 0.0], [x_max, 10.0]),
-                        );
-                    }*/
-                    if let Some((x_min, x_max)) = self.plot_bounds_x {
-                        mini_plot = mini_plot
-                            .include_x(x_min)
-                            .include_x(x_max);
-                    }
-
-
-                    mini_plot.show(ui, |plot_ui| {
                         for task in &self.tasks {
                             let rect = vec![
                                 [task.freq_start, task.time_start],
