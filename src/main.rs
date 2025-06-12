@@ -73,7 +73,7 @@ impl eframe::App for MyApp {
                     freq_end: 300.0,
                     time_start: 0.0,
                     time_end: 0.3,
-                    color: egui::Color32::RED,
+                    color: egui::Color32::from_rgba_unmultiplied(255, 0, 0, 255), // Rouge
                 }),
                 1 => self.tasks.push(Task {
                     name: "Transmission".into(),
@@ -81,7 +81,7 @@ impl eframe::App for MyApp {
                     freq_end: 2500.0,
                     time_start: 0.3,
                     time_end: 0.6,
-                    color: egui::Color32::BLUE,
+                    color: egui::Color32::from_rgba_unmultiplied(0, 0, 255, 200), // Bleu
                 }),
                 2 => {
                     if !self.tasks.is_empty() {
@@ -94,14 +94,14 @@ impl eframe::App for MyApp {
                     freq_end: 5500.0,
                     time_start: 0.0,
                     time_end: 1.0,
-                    color: egui::Color32::GREEN,
+                    color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
                 }),
                 4 => self.tasks.clear(),
                 _ => {}
             }
         }
 
-        ctx.request_repaint();
+        ctx.request_repaint(); // Demande de rafraîchissement de l'interface
 
         // Mise à jour de l'interface utilisateur
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -143,6 +143,18 @@ impl eframe::App for MyApp {
                                         .fill_color(task.color),
                                 );
                             }
+
+                            // Zone de Rx
+                            let rx_zone = vec![
+                                [20., 0.],
+                                [6000., 0.],
+                                [6000., 0.1],
+                                [20., 0.1],
+                            ];
+                            plot_ui.polygon(
+                                Polygon::new("Rx zone", PlotPoints::from(rx_zone))
+                                .fill_color(egui::Color32::from_rgba_unmultiplied(200, 200, 200, 100)),
+                            );
                         });
                 });
 
