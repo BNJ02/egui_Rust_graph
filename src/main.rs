@@ -121,6 +121,7 @@ impl eframe::App for MyApp {
                         .include_x(6000.)
                         .include_y(0.)
                         .include_y(1.)
+                        .show_grid([false, false]) // Désactive la grille X et Y
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
@@ -201,6 +202,7 @@ impl eframe::App for MyApp {
                         .include_x(6000.)
                         .include_y(0.)
                         .include_y(1.)
+                        .show_grid([false, false]) // Désactive la grille X et Y
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
