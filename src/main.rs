@@ -1,6 +1,7 @@
 // Import des modules nécessaires
 use eframe::egui;
-use egui_plot::{Plot, PlotPoints, Polygon};
+use egui::{Color32, Stroke};
+use egui_plot::{Plot, PlotPoints, Polygon, VLine};
 use std::sync::mpsc::{Receiver, channel};
 use std::thread;
 use std::time::Duration;
@@ -140,9 +141,23 @@ impl eframe::App for MyApp {
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
-                                        .fill_color(task.color),
+                                        .fill_color(task.color)
+                                        .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
+
+                            // Zone d'information
+                            let jamming_plan = vec![
+                                [20., 0.],
+                                [6000., 0.],
+                                [6000., 1.],
+                                [20., 1.],
+                            ];
+                            plot_ui.polygon(
+                                Polygon::new("Plan de brouillage du GPB", PlotPoints::from(jamming_plan))
+                                .fill_color(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 0))
+                                .stroke(Stroke::new(2., Color32::from_gray(255))),
+                            );
 
                             // Zone de Rx
                             let rx_zone = vec![
@@ -153,8 +168,23 @@ impl eframe::App for MyApp {
                             ];
                             plot_ui.polygon(
                                 Polygon::new("Rx zone", PlotPoints::from(rx_zone))
-                                .fill_color(egui::Color32::from_rgba_unmultiplied(200, 200, 200, 100)),
+                                .fill_color(egui::Color32::from_rgba_unmultiplied(200, 200, 200, 100))
+                                .stroke(Stroke::new(0.1, Color32::from_gray(100))),
                             );
+
+                            // Split pour les différents amplificateurs
+                            let amplifiers = [
+                                ("Ampli 1", 500.0),
+                                ("Ampli 2", 1000.0),
+                                ("Ampli 3", 2500.0),
+                            ];
+
+                            for (name, freq) in amplifiers.iter() {
+                                plot_ui.vline(
+                                    VLine::new(*name, *freq)
+                                        .stroke(Stroke::new(1., Color32::WHITE)),
+                                );
+                            }
                         });
                 });
 
@@ -190,7 +220,22 @@ impl eframe::App for MyApp {
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
-                                        .fill_color(task.color),
+                                        .fill_color(task.color)
+                                        .stroke(Stroke::new(0., Color32::TRANSPARENT)),
+                                );
+                            }
+
+                            // Split pour les différents amplificateurs
+                            let amplifiers = [
+                                ("Ampli 1", 500.0),
+                                ("Ampli 2", 1000.0),
+                                ("Ampli 3", 2500.0),
+                            ];
+
+                            for (name, freq) in amplifiers.iter() {
+                                plot_ui.vline(
+                                    VLine::new(*name, *freq)
+                                        .stroke(Stroke::new(1., Color32::WHITE)),
                                 );
                             }
                     });
