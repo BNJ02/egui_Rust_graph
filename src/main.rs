@@ -116,7 +116,7 @@ impl eframe::App for MyApp {
                 let main_height = total_height * 0.8;
                 let mini_height = total_height * 0.18;
 
-                let label_tx = self.label_tx.clone(); // clone ici si dans une closure
+                let label_tx_main = self.label_tx.clone(); // clone ici si dans une closure
 
                 // --- Graphe principal ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
@@ -130,7 +130,7 @@ impl eframe::App for MyApp {
                         .include_y(1000.)
                         .show_grid([false, false]) // Désactive la grille X et Y
                         .label_formatter(move |_name, value| {
-                            let _ = label_tx.send(value.clone());
+                            let _ = label_tx_main.send(value.clone());
                             "".to_owned()
                         })
                         .show(ui, |plot_ui| {
@@ -199,38 +199,12 @@ impl eframe::App for MyApp {
                             }
                         });
                 });
-                
-                if let Ok(data_pos) = self.label_rx.try_recv() {
-                    for task in &self.tasks {
-                        if data_pos.x >= task.freq_start
-                            && data_pos.x <= task.freq_end
-                            && data_pos.y >= task.time_start
-                            && data_pos.y <= task.time_end {
-                            egui::show_tooltip_at_pointer(
-                                ui.ctx(),
-                                ui.layer_id(),
-                                ui.id().with("tooltip"),
-                                |ui| {
-                                    ui.set_min_width(120.);
-                                    ui.label(&task.name);
-                                    ui.label(format!(
-                                        "Δf: {:.0}MHz\nΔt: {:.2}ms\ntmin: {:.2}ms\ntmax: {:.2}ms\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
-                                        task.freq_end - task.freq_start,
-                                        task.time_end - task.time_start,
-                                        task.time_start, task.time_end,
-                                        task.freq_start, task.freq_end
-                                    ));
-                                },
-                            );
-                            break;
-                        }
-                    }
-                }
 
                 // --- Espace entre les deux graphiques ---
                 ui.separator();
 
                 // --- Graphe secondaire ---
+                let label_tx_mini = self.label_tx.clone();
                 ui.allocate_ui(egui::vec2(ui.available_width(), mini_height), |ui| {
                     Plot::new("frequence_temps_plot_mini")
                         .link_axis("groupe_x", [true, false])
@@ -241,6 +215,13 @@ impl eframe::App for MyApp {
                         .include_y(0.)
                         .include_y(1000.)
                         .show_grid([false, false]) // Désactive la grille X et Y
+                        .label_formatter({
+                            let label_tx = label_tx_mini.clone();
+                            move |_name, value| {
+                                let _ = label_tx.send(value.clone());
+                                "".to_owned()
+                            }
+                        })
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
@@ -280,6 +261,33 @@ impl eframe::App for MyApp {
                             }
                     });
                 });
+
+                if let Ok(data_pos) = self.label_rx.try_recv() {
+                    for task in &self.tasks {
+                        if data_pos.x >= task.freq_start
+                            && data_pos.x <= task.freq_end
+                            && data_pos.y >= task.time_start
+                            && data_pos.y <= task.time_end {
+                            egui::show_tooltip_at_pointer(
+                                ui.ctx(),
+                                ui.layer_id(),
+                                ui.id().with("tooltip"),
+                                |ui| {
+                                    ui.set_min_width(120.);
+                                    ui.label(&task.name);
+                                    ui.label(format!(
+                                        "Δf: {:.0}MHz\nΔt: {:.2}ms\ntmin: {:.2}ms\ntmax: {:.2}ms\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
+                                        task.freq_end - task.freq_start,
+                                        task.time_end - task.time_start,
+                                        task.time_start, task.time_end,
+                                        task.freq_start, task.freq_end
+                                    ));
+                                },
+                            );
+                            break;
+                        }
+                    }
+                }
             });
         });
     }
