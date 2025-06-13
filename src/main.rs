@@ -2,7 +2,7 @@
 use eframe::egui;
 use egui::{Color32, Stroke};
 use egui_plot::{Plot, PlotPoints, Polygon, VLine};
-use std::sync::mpsc::{Receiver, channel};
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
@@ -10,6 +10,7 @@ fn main() -> eframe::Result<()> {
     env_logger::init();
 
     let (tx, rx) = channel();
+    let (label_tx, label_rx) = channel();
 
     // Thread qui envoie un "tick" toutes les 2 secondes
     thread::spawn(move || {
@@ -28,6 +29,8 @@ fn main() -> eframe::Result<()> {
         plot_bounds_x: Some((2.0, 6.0)),
         last_bounds_x: Some((0.0, 10.0)),
         receiver: rx,
+        label_tx: label_tx,
+        label_rx: label_rx,
         step: 0,
     };
 
@@ -59,6 +62,8 @@ struct MyApp {
     plot_bounds_x: Option<(f64, f64)>, // Limites X du graphe principal
     last_bounds_x: Option<(f64, f64)>, // Dernières limites X utilisées
     receiver: Receiver<usize>, // Récepteur pour les données
+    label_tx: Sender<egui_plot::PlotPoint>,
+    label_rx: Receiver<egui_plot::PlotPoint>, // Récepteur pour les étiquettes de points
     step: usize, // Étape de progression
 }
 
@@ -111,6 +116,8 @@ impl eframe::App for MyApp {
                 let main_height = total_height * 0.8;
                 let mini_height = total_height * 0.18;
 
+                let label_tx = self.label_tx.clone(); // clone ici si dans une closure
+
                 // --- Graphe principal ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
                     Plot::new("frequence_temps_plot_main")
@@ -122,6 +129,10 @@ impl eframe::App for MyApp {
                         .include_y(0.)
                         .include_y(1.)
                         .show_grid([false, false]) // Désactive la grille X et Y
+                        .label_formatter(move |_name, value| {
+                            let _ = label_tx.send(value.clone());
+                            "".to_owned()
+                        })
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
@@ -188,6 +199,33 @@ impl eframe::App for MyApp {
                             }
                         });
                 });
+                
+                if let Ok(data_pos) = self.label_rx.try_recv() {
+                    for task in &self.tasks {
+                        if data_pos.x >= task.freq_start
+                            && data_pos.x <= task.freq_end
+                            && data_pos.y >= task.time_start
+                            && data_pos.y <= task.time_end {
+                            egui::show_tooltip_at_pointer(
+                                ui.ctx(),
+                                ui.layer_id(),
+                                ui.id().with("tooltip"),
+                                |ui| {
+                                    ui.set_min_width(120.);
+                                    ui.label(&task.name);
+                                    ui.label(format!(
+                                        "Δf: {:.0}MHz\nΔt: {:.2}s\ntmin: {:.2}s\ntmax: {:.2}s\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
+                                        task.freq_end - task.freq_start,
+                                        task.time_end - task.time_start,
+                                        task.time_start, task.time_end,
+                                        task.freq_start, task.freq_end
+                                    ));
+                                },
+                            );
+                            break;
+                        }
+                    }
+                }
 
                 // --- Espace entre les deux graphiques ---
                 ui.separator();
