@@ -1,7 +1,7 @@
 // Import des modules nécessaires
 use eframe::egui;
 use egui::{Color32, Stroke};
-use egui_plot::{Plot, PlotPoints, Polygon, VLine};
+use egui_plot::{Plot, PlotPoint, PlotPoints, Polygon, Text};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
@@ -40,7 +40,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        "Représentation GANTT",     // Titre de la fenêtre
+        "Représentation GANTT du plan de brouillage",     // Titre de la fenêtre
         options,                     // Options graphiques
         Box::new(|_cc| Ok(Box::new(app))), // Instanciation de notre struct MyApp
     )
@@ -107,7 +107,8 @@ impl eframe::App for MyApp {
             }
         }
 
-        ctx.request_repaint(); // Demande de rafraîchissement de l'interface
+        // Demande de rafraîchissement de l'interface
+        ctx.request_repaint();
 
         // Mise à jour de l'interface utilisateur
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -171,6 +172,34 @@ impl eframe::App for MyApp {
                                 .stroke(Stroke::new(2., Color32::from_gray(255))),
                             );
 
+                            // Zone des amplis-antennes
+                            let antennas = vec![
+                                ("Antenne 20-500MHz", 20., 500., 1100., Color32::from_rgba_unmultiplied(0, 187, 221, 255)),
+                                ("Antenne 500-1000MHz", 500., 1000., 1100., Color32::from_rgba_unmultiplied(174, 37, 115, 255)),
+                                ("Antenne 960-1215MHz", 960., 1215., 1125., Color32::from_rgba_unmultiplied(0, 171, 142, 255)),
+                                ("Antenne 1000-2500MHz", 1000., 2500., 1100., Color32::from_rgba_unmultiplied(255, 163, 0, 255)),
+                                ("Antenne 2400-6000MHz", 2400., 6000., 1100., Color32::from_rgba_unmultiplied(124, 127, 171, 255)),
+                            ];
+
+                            for (label, freq_start, freq_end, height, color) in antennas {
+                                let rect = vec![
+                                    [freq_start, 0.],
+                                    [freq_end, 0.],
+                                    [freq_end, height],
+                                    [freq_start, height],
+                                ];
+                                plot_ui.text(Text::new(
+                                    label,
+                                    PlotPoint::new((freq_start + freq_end) / 2., height - 50.),
+                                    egui::RichText::new(label.replace(" ", "\n")),
+                                ).color(color));
+                                plot_ui.polygon(
+                                    Polygon::new(label, PlotPoints::from(rect))
+                                    .fill_color(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 0))
+                                    .stroke(Stroke::new(1., color)),
+                                );
+                            }
+
                             // Zone de Rx
                             let rx_zone = vec![
                                 [20., 0.],
@@ -183,20 +212,6 @@ impl eframe::App for MyApp {
                                 .fill_color(egui::Color32::from_rgba_unmultiplied(200, 200, 200, 100))
                                 .stroke(Stroke::new(0.1, Color32::from_gray(100))),
                             );
-
-                            // Split pour les différents amplificateurs
-                            let amplifiers = [
-                                ("Ampli 1", 500.0),
-                                ("Ampli 2", 1000.0),
-                                ("Ampli 3", 2500.0),
-                            ];
-
-                            for (name, freq) in amplifiers.iter() {
-                                plot_ui.vline(
-                                    VLine::new(*name, *freq)
-                                        .stroke(Stroke::new(1., Color32::WHITE)),
-                                );
-                            }
                         });
                 });
 
@@ -245,20 +260,6 @@ impl eframe::App for MyApp {
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
-
-                            // Split pour les différents amplificateurs
-                            let amplifiers = [
-                                ("Ampli 1", 500.0),
-                                ("Ampli 2", 1000.0),
-                                ("Ampli 3", 2500.0),
-                            ];
-
-                            for (name, freq) in amplifiers.iter() {
-                                plot_ui.vline(
-                                    VLine::new(*name, *freq)
-                                        .stroke(Stroke::new(1., Color32::WHITE)),
-                                );
-                            }
                     });
                 });
 
@@ -287,6 +288,17 @@ impl eframe::App for MyApp {
                             break;
                         }
                     }
+
+                    // Tooltip fallback si aucune tâche survolée
+                    egui::show_tooltip_at_pointer(
+                        ui.ctx(),
+                        ui.layer_id(),
+                        ui.id().with("tooltip"),
+                        |ui| {
+                            ui.set_min_width(70.);
+                            ui.label(format!("{:.1} MHz\n{:.1} ms", data_pos.x, data_pos.y));
+                        },
+                    );
                 }
             });
         });
