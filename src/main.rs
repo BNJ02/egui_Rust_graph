@@ -26,8 +26,8 @@ fn main() -> eframe::Result<()> {
 
     let app = MyApp {
         tasks: vec![],
-        plot_bounds_x: Some((2.0, 6.0)),
-        last_bounds_x: Some((0.0, 10.0)),
+        plot_bounds_x: Some((20., 6000.)),
+        last_bounds_x: Some((0., 1.)),
         receiver: rx,
         label_tx: label_tx,
         label_rx: label_rx,
@@ -35,7 +35,7 @@ fn main() -> eframe::Result<()> {
     };
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([960.0, 700.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([960., 700.]),
         ..Default::default()
     };
 
@@ -75,18 +75,18 @@ impl eframe::App for MyApp {
             match step {
                 0 => self.tasks.push(Task {
                     name: "Init capteurs".into(),
-                    freq_start: 100.0,
-                    freq_end: 300.0,
-                    time_start: 0.0,
-                    time_end: 0.3,
+                    freq_start: 100.,
+                    freq_end: 300.,
+                    time_start: 0.,
+                    time_end: 300.,
                     color: egui::Color32::from_rgba_unmultiplied(255, 0, 0, 255), // Rouge
                 }),
                 1 => self.tasks.push(Task {
                     name: "Transmission".into(),
-                    freq_start: 1000.0,
-                    freq_end: 2500.0,
-                    time_start: 0.3,
-                    time_end: 0.6,
+                    freq_start: 1000.,
+                    freq_end: 2500.,
+                    time_start: 300.,
+                    time_end: 600.,
                     color: egui::Color32::from_rgba_unmultiplied(0, 0, 255, 200), // Bleu
                 }),
                 2 => {
@@ -96,10 +96,10 @@ impl eframe::App for MyApp {
                 }
                 3 => self.tasks.push(Task {
                     name: "Sleep mode".into(),
-                    freq_start: 5000.0,
-                    freq_end: 5500.0,
-                    time_start: 0.0,
-                    time_end: 1.0,
+                    freq_start: 5000.,
+                    freq_end: 5500.,
+                    time_start: 0.,
+                    time_end: 1000.,
                     color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
                 }),
                 4 => self.tasks.clear(),
@@ -123,11 +123,11 @@ impl eframe::App for MyApp {
                     Plot::new("frequence_temps_plot_main")
                         .link_axis("groupe_x", [true, false])
                         .x_axis_formatter(|x, _| format!("{:.1} MHz", x.value))
-                        .y_axis_formatter(|y, _| format!("{:.1} s", y.value))
+                        .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
                         .include_x(20.)
                         .include_x(6000.)
                         .include_y(0.)
-                        .include_y(1.)
+                        .include_y(1000.)
                         .show_grid([false, false]) // Désactive la grille X et Y
                         .label_formatter(move |_name, value| {
                             let _ = label_tx.send(value.clone());
@@ -162,8 +162,8 @@ impl eframe::App for MyApp {
                             let jamming_plan = vec![
                                 [20., 0.],
                                 [6000., 0.],
-                                [6000., 1.],
-                                [20., 1.],
+                                [6000., 1000.],
+                                [20., 1000.],
                             ];
                             plot_ui.polygon(
                                 Polygon::new("Plan de brouillage du GPB", PlotPoints::from(jamming_plan))
@@ -175,8 +175,8 @@ impl eframe::App for MyApp {
                             let rx_zone = vec![
                                 [20., 0.],
                                 [6000., 0.],
-                                [6000., 0.1],
-                                [20., 0.1],
+                                [6000., 100.],
+                                [20., 100.],
                             ];
                             plot_ui.polygon(
                                 Polygon::new("Rx zone", PlotPoints::from(rx_zone))
@@ -214,7 +214,7 @@ impl eframe::App for MyApp {
                                     ui.set_min_width(120.);
                                     ui.label(&task.name);
                                     ui.label(format!(
-                                        "Δf: {:.0}MHz\nΔt: {:.2}s\ntmin: {:.2}s\ntmax: {:.2}s\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
+                                        "Δf: {:.0}MHz\nΔt: {:.2}ms\ntmin: {:.2}ms\ntmax: {:.2}ms\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
                                         task.freq_end - task.freq_start,
                                         task.time_end - task.time_start,
                                         task.time_start, task.time_end,
@@ -235,11 +235,11 @@ impl eframe::App for MyApp {
                     Plot::new("frequence_temps_plot_mini")
                         .link_axis("groupe_x", [true, false])
                         .show_axes([false, true]) // ← axe des ordonées visible, mais
-                        .y_axis_formatter(|y, _| format!("{:.1} s", y.value))
+                        .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
                         .include_x(20.)
                         .include_x(6000.)
                         .include_y(0.)
-                        .include_y(1.)
+                        .include_y(1000.)
                         .show_grid([false, false]) // Désactive la grille X et Y
                         .show(ui, |plot_ui| {
                             // Lire les bornes X visibles à la fin du tracé
