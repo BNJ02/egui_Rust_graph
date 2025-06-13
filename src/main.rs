@@ -46,6 +46,28 @@ fn main() -> eframe::Result<()> {
     )
 }
 
+// Enumération des antennes disponibles
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Antenna {
+    A20_500,
+    A500_1000,
+    A960_1215,
+    A1000_2500,
+    A2400_6000,
+}
+
+impl Antenna {
+    fn color(&self) -> Color32 {
+        match self {
+            Antenna::A20_500 => Color32::from_rgba_unmultiplied(0, 187, 221, 255),
+            Antenna::A500_1000 => Color32::from_rgba_unmultiplied(174, 37, 115, 255),
+            Antenna::A960_1215 => Color32::from_rgba_unmultiplied(0, 171, 142, 255),
+            Antenna::A1000_2500 => Color32::from_rgba_unmultiplied(255, 163, 0, 255),
+            Antenna::A2400_6000 => Color32::from_rgba_unmultiplied(124, 127, 171, 255),
+        }
+    }
+}
+
 // Structure représentant une tâche dans le diagramme
 struct Task {
     name: String,        // Nom de la tâche
@@ -53,7 +75,13 @@ struct Task {
     freq_end: f64,       // Fréquence de fin (MHz)
     time_start: f64,     // Temps de début (secondes)
     time_end: f64,       // Temps de fin (secondes)
-    color: egui::Color32, // Couleur de la tâche
+    antenna: Antenna,    // Antenne associée à la tâche
+}
+
+impl Task {
+    fn color(&self) -> Color32 {
+        self.antenna.color()
+    }
 }
 
 // Structure principale de l'application
@@ -79,7 +107,7 @@ impl eframe::App for MyApp {
                     freq_end: 300.,
                     time_start: 0.,
                     time_end: 300.,
-                    color: egui::Color32::from_rgba_unmultiplied(255, 0, 0, 255), // Rouge
+                    antenna: Antenna::A20_500,
                 }),
                 1 => self.tasks.push(Task {
                     name: "Transmission".into(),
@@ -87,7 +115,7 @@ impl eframe::App for MyApp {
                     freq_end: 2500.,
                     time_start: 300.,
                     time_end: 600.,
-                    color: egui::Color32::from_rgba_unmultiplied(0, 0, 255, 200), // Bleu
+                    antenna: Antenna::A1000_2500,
                 }),
                 2 => {
                     if !self.tasks.is_empty() {
@@ -100,7 +128,7 @@ impl eframe::App for MyApp {
                     freq_end: 5500.,
                     time_start: 0.,
                     time_end: 1000.,
-                    color: egui::Color32::from_rgba_unmultiplied(0, 255, 0, 100), // Vert
+                    antenna: Antenna::A2400_6000,
                 }),
                 4 => self.tasks.clear(),
                 _ => {}
@@ -154,7 +182,7 @@ impl eframe::App for MyApp {
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
-                                        .fill_color(task.color)
+                                        .fill_color(task.color())
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
@@ -190,7 +218,7 @@ impl eframe::App for MyApp {
                                 ];
                                 plot_ui.text(Text::new(
                                     label,
-                                    PlotPoint::new((freq_start + freq_end) / 2., height - 50.),
+                                    PlotPoint::new((freq_start + freq_end) / 2., if label == "Antenne 960-1215MHz" { height + 25. } else { height - 50. }),
                                     egui::RichText::new(label.replace(" ", "\n")),
                                 ).color(color));
                                 plot_ui.polygon(
@@ -256,7 +284,7 @@ impl eframe::App for MyApp {
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
-                                        .fill_color(task.color)
+                                        .fill_color(task.color())
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
