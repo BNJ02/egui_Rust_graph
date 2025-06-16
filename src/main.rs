@@ -1,7 +1,8 @@
 // Import des modules nécessaires
 use eframe::egui;
 use egui::{Color32, Stroke};
-use egui_plot::{Plot, PlotPoint, PlotPoints, Polygon, Text};
+use egui_plot::{log_grid_spacer, uniform_grid_spacer, GridMark, Plot, PlotPoints, Polygon};
+// Import des traits nécessaires
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
@@ -32,6 +33,7 @@ fn main() -> eframe::Result<()> {
         label_tx: label_tx,
         label_rx: label_rx,
         step: 0,
+        log_scale: false, // Indicateur pour l'échelle logarithmique
     };
 
     let options = eframe::NativeOptions {
@@ -172,6 +174,7 @@ struct MyApp {
     label_tx: Sender<egui_plot::PlotPoint>,
     label_rx: Receiver<egui_plot::PlotPoint>, // Récepteur pour les étiquettes de points
     step: usize, // Étape de progression
+    log_scale: bool, // Indicateur pour l'échelle logarithmique
 }
 
 // Affichage principal
@@ -217,6 +220,29 @@ impl eframe::App for MyApp {
         // Demande de rafraîchissement de l'interface
         ctx.request_repaint();
 
+        egui::SidePanel::left("side_panel").show(ctx, |ui| {
+            ui.heading("Actions");
+            if ui.button("Ajouter une tâche").clicked() {
+                self.tasks.push(Task {
+                    name: format!("Tâche {}", self.tasks.len() + 1),
+                    freq_start: 1000.,
+                    freq_end: 2000.,
+                    time_start: 100. * (self.tasks.len() as f64),
+                    time_end: 100. * (self.tasks.len() as f64 + 1.),
+                    amplifier: Amplifier::A1000_2500,
+                });
+            }
+            if ui.button("Effacer les tâches").clicked() {
+                self.tasks.clear();
+            }
+            ui.separator();
+            ui.label("Nombre de tâches :");
+            ui.label(format!("{}", self.tasks.len()));
+            ui.separator();
+            ui.checkbox(&mut self.log_scale, "Échelle logarithmique sur X");
+        });
+
+
         // Mise à jour de l'interface utilisateur
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -226,17 +252,31 @@ impl eframe::App for MyApp {
 
                 let label_tx_main = self.label_tx.clone(); // clone ici si dans une closure
 
+                let spacer = if self.log_scale {
+                    log_grid_spacer(10)
+                } else {
+                    uniform_grid_spacer(|_input| [100.0, 500.0, 1000.0])
+                };
+                let formatter = |mark: GridMark, _range: &_| {
+                    if self.log_scale {
+                        format!("{:.1} MHz", 10f64.powf(mark.value))
+                    } else {
+                        format!("{:.0} MHz", mark.value)
+                    }
+                };
+
                 // --- Graphe principal ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
                     Plot::new("frequence_temps_plot_main")
                         .link_axis("groupe_x", [true, false])
-                        .x_axis_formatter(|x, _| format!("{:.1} MHz", x.value))
+                        .x_axis_formatter(formatter)
                         .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
                         .include_x(20.)
                         .include_x(6000.)
                         .include_y(0.)
                         .include_y(1000.)
-                        .show_grid([false, false]) // Désactive la grille X et Y
+                        .x_grid_spacer(spacer) })
+                        .inner.show_grid([false, false]) // Désactive la grille X et Y
                         .label_formatter(move |_name, value| {
                             let _ = label_tx_main.send(value.clone());
                             "".to_owned()
@@ -255,35 +295,54 @@ impl eframe::App for MyApp {
                             // Afficher les zones de fond
                             for zone in get_background_zones() {
                                 if let Some((text, pos, color)) = &zone.label {
+                                    let pos_x = if self.log_scale { pos[0].log10() } else { pos[0] };
                                     plot_ui.text(egui_plot::Text::new(
                                         text.clone(),
-                                        egui_plot::PlotPoint::new(pos[0], pos[1]),
+                                        egui_plot::PlotPoint::new(pos_x, pos[1]),
                                         egui::RichText::new(text).color(*color),
                                     ));
                                 }
+
+                                let transformed_area: Vec<[f64; 2]> = if self.log_scale {
+                                    zone.area
+                                        .iter()
+                                        .map(|[x, y]| [x.log10(), *y])
+                                        .collect()
+                                } else {
+                                    zone.area.clone()
+                                };
+
                                 plot_ui.polygon(
-                                    Polygon::new("zone", PlotPoints::from(zone.area.clone()))
+                                    Polygon::new("zone", PlotPoints::from(transformed_area))
                                         .fill_color(zone.fill)
                                         .stroke(zone.stroke),
                                 );
                             }
 
                             // Horizontal line pour l'axe des fréquences
+                            let hline = if self.log_scale {
+                                vec![[20_f64.log10(), 1000.], [6000_f64.log10(), 1000.]]
+                            } else {
+                                vec![[20., 1000.], [6000., 1000.]]
+                            };
                             plot_ui.line(
-                                egui_plot::Line::new("horizontal_line", PlotPoints::from(vec![
-                                    [20., 1000.],
-                                    [6000., 1000.],
-                                ]))
-                                .stroke(Stroke::new(1.0, Color32::from_gray(100))),
+                                egui_plot::Line::new("horizontal_line", PlotPoints::from(hline))
+                                    .stroke(Stroke::new(1.0, Color32::from_gray(100))),
                             );
 
                             // Afficher les tâches
                             for task in &self.tasks {
+                                let (x0, x1) = if self.log_scale {
+                                    (task.freq_start.log10(), task.freq_end.log10())
+                                } else {
+                                    (task.freq_start, task.freq_end)
+                                };
+
                                 let rect = vec![
-                                    [task.freq_start, task.time_start],
-                                    [task.freq_end, task.time_start],
-                                    [task.freq_end, task.time_end],
-                                    [task.freq_start, task.time_end],
+                                    [x0, task.time_start],
+                                    [x1, task.time_start],
+                                    [x1, task.time_end],
+                                    [x0, task.time_end],
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
@@ -291,11 +350,8 @@ impl eframe::App for MyApp {
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
-                        });
+            // })
                 });
-
-                // --- Espace entre les deux graphiques ---
-                // ui.separator();
 
                 // --- Graphe secondaire ---
                 let label_tx_mini = self.label_tx.clone();
@@ -342,6 +398,7 @@ impl eframe::App for MyApp {
                     });
                 });
 
+                // Affichages pour hover
                 if let Ok(data_pos) = self.label_rx.try_recv() {
                     let mut task_hovered = false;
 
