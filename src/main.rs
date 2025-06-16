@@ -242,7 +242,6 @@ impl eframe::App for MyApp {
             ui.checkbox(&mut self.log_scale, "Échelle logarithmique sur X");
         });
 
-
         // Mise à jour de l'interface utilisateur
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -250,7 +249,7 @@ impl eframe::App for MyApp {
                 let main_height = total_height * 0.8;
                 let mini_height = total_height * 0.18;
 
-                let label_tx_main = self.label_tx.clone(); // clone ici si dans une closure
+                let label_tx_main = self.label_tx.clone();
 
                 let spacer = if self.log_scale {
                     log_grid_spacer(10)
@@ -271,28 +270,24 @@ impl eframe::App for MyApp {
                         .link_axis("groupe_x", [true, false])
                         .x_axis_formatter(formatter)
                         .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
-                        .include_x(20.)
-                        .include_x(6000.)
+                        .include_x(if self.log_scale { 20_f64.log10() } else { 20. })
+                        .include_x(if self.log_scale { 6000_f64.log10() } else { 6000. })
                         .include_y(0.)
                         .include_y(1000.)
-                        .x_grid_spacer(spacer) })
-                        .inner.show_grid([false, false]) // Désactive la grille X et Y
+                        .x_grid_spacer(spacer)
+                        .show_grid([false, false])
                         .label_formatter(move |_name, value| {
                             let _ = label_tx_main.send(value.clone());
                             "".to_owned()
                         })
                         .show(ui, |plot_ui| {
-                            // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
                             let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
-
-                            // Vérifier si les bornes X ont changé
                             if self.last_bounds_x != Some(new_bounds_x) {
                                 self.plot_bounds_x = Some(new_bounds_x);
                                 self.last_bounds_x = Some(new_bounds_x);
                             }
 
-                            // Afficher les zones de fond
                             for zone in get_background_zones() {
                                 if let Some((text, pos, color)) = &zone.label {
                                     let pos_x = if self.log_scale { pos[0].log10() } else { pos[0] };
@@ -304,10 +299,7 @@ impl eframe::App for MyApp {
                                 }
 
                                 let transformed_area: Vec<[f64; 2]> = if self.log_scale {
-                                    zone.area
-                                        .iter()
-                                        .map(|[x, y]| [x.log10(), *y])
-                                        .collect()
+                                    zone.area.iter().map(|[x, y]| [x.log10(), *y]).collect()
                                 } else {
                                     zone.area.clone()
                                 };
@@ -319,7 +311,6 @@ impl eframe::App for MyApp {
                                 );
                             }
 
-                            // Horizontal line pour l'axe des fréquences
                             let hline = if self.log_scale {
                                 vec![[20_f64.log10(), 1000.], [6000_f64.log10(), 1000.]]
                             } else {
@@ -330,7 +321,6 @@ impl eframe::App for MyApp {
                                     .stroke(Stroke::new(1.0, Color32::from_gray(100))),
                             );
 
-                            // Afficher les tâches
                             for task in &self.tasks {
                                 let (x0, x1) = if self.log_scale {
                                     (task.freq_start.log10(), task.freq_end.log10())
@@ -350,7 +340,7 @@ impl eframe::App for MyApp {
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
-            // })
+                        });
                 });
 
                 // --- Graphe secondaire ---
@@ -358,13 +348,13 @@ impl eframe::App for MyApp {
                 ui.allocate_ui(egui::vec2(ui.available_width(), mini_height), |ui| {
                     Plot::new("frequence_temps_plot_mini")
                         .link_axis("groupe_x", [true, false])
-                        .show_axes([false, true]) // ← axe des ordonées visible, mais
+                        .show_axes([false, true])
                         .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
-                        .include_x(20.)
-                        .include_x(6000.)
+                        .include_x(if self.log_scale { 20_f64.log10() } else { 20. })
+                        .include_x(if self.log_scale { 6000_f64.log10() } else { 6000. })
                         .include_y(0.)
                         .include_y(1000.)
-                        .show_grid([false, false]) // Désactive la grille X et Y
+                        .show_grid([false, false])
                         .label_formatter({
                             let label_tx = label_tx_mini.clone();
                             move |_name, value| {
@@ -373,21 +363,25 @@ impl eframe::App for MyApp {
                             }
                         })
                         .show(ui, |plot_ui| {
-                            // Lire les bornes X visibles à la fin du tracé
                             let bounds = plot_ui.plot_bounds();
                             let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
-                            // Vérifier si les bornes X ont changé
                             if self.last_bounds_x != Some(new_bounds_x) {
                                 self.plot_bounds_x = Some(new_bounds_x);
                                 self.last_bounds_x = Some(new_bounds_x);
                             }
 
                             for task in &self.tasks {
+                                let (x0, x1) = if self.log_scale {
+                                    (task.freq_start.log10(), task.freq_end.log10())
+                                } else {
+                                    (task.freq_start, task.freq_end)
+                                };
+
                                 let rect = vec![
-                                    [task.freq_start, task.time_start],
-                                    [task.freq_end, task.time_start],
-                                    [task.freq_end, task.time_end],
-                                    [task.freq_start, task.time_end],
+                                    [x0, task.time_start],
+                                    [x1, task.time_start],
+                                    [x1, task.time_end],
+                                    [x0, task.time_end],
                                 ];
                                 plot_ui.polygon(
                                     Polygon::new(&task.name, PlotPoints::from(rect))
@@ -395,16 +389,20 @@ impl eframe::App for MyApp {
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
-                    });
+                        });
                 });
 
-                // Affichages pour hover
                 if let Ok(data_pos) = self.label_rx.try_recv() {
                     let mut task_hovered = false;
+                    let data_pos_x = if self.log_scale {
+                        10f64.powf(data_pos.x)
+                    } else {
+                        data_pos.x
+                    };
 
                     for task in &self.tasks {
-                        if data_pos.x >= task.freq_start
-                            && data_pos.x <= task.freq_end
+                        if data_pos_x >= task.freq_start
+                            && data_pos_x <= task.freq_end
                             && data_pos.y >= task.time_start
                             && data_pos.y <= task.time_end {
                             egui::show_tooltip_at_pointer(
@@ -432,7 +430,7 @@ impl eframe::App for MyApp {
                     if !task_hovered {
                         let mut zone_labels = vec![];
                         for zone in get_background_zones() {
-                            if zone.contains(data_pos.x, data_pos.y) {
+                            if zone.contains(data_pos_x, data_pos.y) {
                                 zone_labels.push(zone.name());
                             }
                         }
@@ -449,17 +447,17 @@ impl eframe::App for MyApp {
                                     }
                                 },
                             );
-                        } else {
-                            egui::show_tooltip_at_pointer(
-                                ui.ctx(),
-                                ui.layer_id(),
-                                ui.id().with("tooltip"),
-                                |ui| {
-                                    ui.set_min_width(70.);
-                                    ui.label(format!("{:.1} MHz\n{:.1} ms", data_pos.x, data_pos.y));
-                                },
-                            );
                         }
+                        
+                        egui::show_tooltip_at_pointer(
+                            ui.ctx(),
+                            ui.layer_id(),
+                            ui.id().with("tooltip"),
+                            |ui| {
+                                ui.set_min_width(70.);
+                                ui.label(format!("{:.1} MHz\n{:.1} ms", data_pos_x, data_pos.y));
+                            },
+                        );
                     }
                 }
             });
