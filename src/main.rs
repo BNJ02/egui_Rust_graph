@@ -60,10 +60,10 @@ impl Amplifier {
     fn color(&self) -> Color32 {
         match self {
             Amplifier::A20_500 => Color32::from_rgba_unmultiplied(0, 187, 221, 255),
-            Amplifier::A500_1000 => Color32::from_rgba_unmultiplied(174, 37, 115, 255),
-            Amplifier::A960_1215 => Color32::from_rgba_unmultiplied(0, 171, 142, 255),
-            Amplifier::A1000_2500 => Color32::from_rgba_unmultiplied(255, 163, 0, 255),
-            Amplifier::A2400_6000 => Color32::from_rgba_unmultiplied(124, 127, 171, 255),
+            Amplifier::A500_1000 => Color32::from_rgba_unmultiplied(255, 163, 0, 255),
+            Amplifier::A960_1215 => Color32::from_rgba_unmultiplied(124, 127, 171, 255),
+            Amplifier::A1000_2500 => Color32::from_rgba_unmultiplied(0, 171, 142, 255),
+            Amplifier::A2400_6000 => Color32::from_rgba_unmultiplied(174, 37, 115, 255),
         }
     }
 }
@@ -72,7 +72,6 @@ impl Amplifier {
 enum BackgroundZoneKind {
     RxZone,
     Amplifier(&'static str),
-    JammingPlan,
 }
 
 struct BackgroundZone {
@@ -112,23 +111,12 @@ impl BackgroundZone {
         match self.kind {
             BackgroundZoneKind::RxZone => "Zone de réception".to_string(),
             BackgroundZoneKind::Amplifier(label) => label.to_string(),
-            BackgroundZoneKind::JammingPlan => "Plan de brouillage du GPB".to_string(),
         }
     }
 }
 
-// Fonction pour obtenir les zones de fond du graphe
-// Ces zones représentent les différentes sections du plan de brouillage
-// et les antennes utilisées.
 fn get_background_zones() -> Vec<BackgroundZone> {
     let mut zones = vec![
-        BackgroundZone::new(
-            BackgroundZoneKind::JammingPlan,
-            vec![[20., 0.], [6000., 0.], [6000., 1000.], [20., 1000.]],
-            Stroke::new(2., Color32::from_gray(255)),
-            Color32::from_rgba_unmultiplied(0, 0, 0, 0),
-            None,
-        ),
         BackgroundZone::new(
             BackgroundZoneKind::RxZone,
             vec![[20., 0.], [6000., 0.], [6000., 100.], [20., 100.]],
@@ -139,11 +127,11 @@ fn get_background_zones() -> Vec<BackgroundZone> {
     ];
 
     let amplifiers = vec![
-        ("Antenne 20-500MHz", 20., 500., 1100., Color32::from_rgba_unmultiplied(0, 187, 221, 255)),
-        ("Antenne 500-1000MHz", 500., 1000., 1100., Color32::from_rgba_unmultiplied(174, 37, 115, 255)),
-        ("Antenne 960-1215MHz", 960., 1215., 1125., Color32::from_rgba_unmultiplied(0, 171, 142, 255)),
-        ("Antenne 1000-2500MHz", 1000., 2500., 1100., Color32::from_rgba_unmultiplied(255, 163, 0, 255)),
-        ("Antenne 2400-6000MHz", 2400., 6000., 1100., Color32::from_rgba_unmultiplied(124, 127, 171, 255)),
+        ("Amplifier 20-500MHz", 20., 500., 1100., Color32::from_rgba_unmultiplied(0, 187, 221, 255)),
+        ("Amplifier 500-1000MHz", 500., 1000., 1100., Color32::from_rgba_unmultiplied(255, 163, 0, 255)),
+        ("Amplifier 960-1215MHz", 960., 1215., 1125., Color32::from_rgba_unmultiplied(124, 127, 171, 255)),
+        ("Amplifier 1000-2500MHz", 1000., 2500., 1100., Color32::from_rgba_unmultiplied(0, 171, 142, 255)),
+        ("Amplifier 2400-6000MHz", 2400., 6000., 1100., Color32::from_rgba_unmultiplied(174, 37, 115, 255)),
     ];
 
     for (label, f_start, f_end, height, color) in amplifiers {
@@ -152,7 +140,7 @@ fn get_background_zones() -> Vec<BackgroundZone> {
             vec![[f_start, 0.], [f_end, 0.], [f_end, height], [f_start, height]],
             Stroke::new(1., color),
             Color32::from_rgba_unmultiplied(0, 0, 0, 0),
-            Some((label.replace(" ", "\n"), [(f_start + f_end) / 2., if label == "Antenne 960-1215MHz" { height + 25. } else { height - 50. }], color)),
+            Some((label.replace(" ", "\n"), [(f_start + f_end) / 2., if label == "Amplifier 960-1215MHz" { height + 25. } else { height - 50. }], color)),
         ));
     }
 
@@ -166,7 +154,7 @@ struct Task {
     freq_end: f64,       // Fréquence de fin (MHz)
     time_start: f64,     // Temps de début (secondes)
     time_end: f64,       // Temps de fin (secondes)
-    amplifier: Amplifier,    // Antenne associée à la tâche
+    amplifier: Amplifier,    // Amplifier associée à la tâche
 }
 
 impl Task {
@@ -280,6 +268,15 @@ impl eframe::App for MyApp {
                                 );
                             }
 
+                            // Horizontal line pour l'axe des fréquences
+                            plot_ui.line(
+                                egui_plot::Line::new("horizontal_line", PlotPoints::from(vec![
+                                    [20., 1000.],
+                                    [6000., 1000.],
+                                ]))
+                                .stroke(Stroke::new(1.0, Color32::from_gray(100))),
+                            );
+
                             // Afficher les tâches
                             for task in &self.tasks {
                                 let rect = vec![
@@ -346,6 +343,8 @@ impl eframe::App for MyApp {
                 });
 
                 if let Ok(data_pos) = self.label_rx.try_recv() {
+                    let mut task_hovered = false;
+
                     for task in &self.tasks {
                         if data_pos.x >= task.freq_start
                             && data_pos.x <= task.freq_end
@@ -359,7 +358,8 @@ impl eframe::App for MyApp {
                                     ui.set_min_width(120.);
                                     ui.label(&task.name);
                                     ui.label(format!(
-                                        "Δf: {:.0}MHz\nΔt: {:.2}ms\ntmin: {:.2}ms\ntmax: {:.2}ms\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
+                                        "Amplifier: {:?}\nΔf: {:.0}MHz\nΔt: {:.2}ms\ntmin: {:.2}ms\ntmax: {:.2}ms\nfmin: {:.0}MHz\nfmax: {:.0}MHz",
+                                        task.amplifier,
                                         task.freq_end - task.freq_start,
                                         task.time_end - task.time_start,
                                         task.time_start, task.time_end,
@@ -367,35 +367,43 @@ impl eframe::App for MyApp {
                                     ));
                                 },
                             );
+                            task_hovered = true;
                             break;
                         }
                     }
 
-                    for zone in get_background_zones() {
-                        if zone.contains(data_pos.x, data_pos.y) {
+                    if !task_hovered {
+                        let mut zone_labels = vec![];
+                        for zone in get_background_zones() {
+                            if zone.contains(data_pos.x, data_pos.y) {
+                                zone_labels.push(zone.name());
+                            }
+                        }
+
+                        if !zone_labels.is_empty() {
                             egui::show_tooltip_at_pointer(
                                 ui.ctx(),
                                 ui.layer_id(),
                                 ui.id().with("tooltip"),
                                 |ui| {
                                     ui.set_min_width(70.);
-                                    ui.label(zone.name());
+                                    for label in zone_labels {
+                                        ui.label(label);
+                                    }
                                 },
                             );
-                            break;
+                        } else {
+                            egui::show_tooltip_at_pointer(
+                                ui.ctx(),
+                                ui.layer_id(),
+                                ui.id().with("tooltip"),
+                                |ui| {
+                                    ui.set_min_width(70.);
+                                    ui.label(format!("{:.1} MHz\n{:.1} ms", data_pos.x, data_pos.y));
+                                },
+                            );
                         }
                     }
-
-                    // Tooltip fallback si aucune tâche survolée
-                    egui::show_tooltip_at_pointer(
-                        ui.ctx(),
-                        ui.layer_id(),
-                        ui.id().with("tooltip"),
-                        |ui| {
-                            ui.set_min_width(70.);
-                            ui.label(format!("{:.1} MHz\n{:.1} ms", data_pos.x, data_pos.y));
-                        },
-                    );
                 }
             });
         });
