@@ -70,9 +70,9 @@ impl Amplifier {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum BackgroundZoneKind {
-    JammingPlan,
     RxZone,
     Amplifier(&'static str),
+    JammingPlan,
 }
 
 struct BackgroundZone {
@@ -86,6 +86,34 @@ struct BackgroundZone {
 impl BackgroundZone {
     fn new(kind: BackgroundZoneKind, area: Vec<[f64; 2]>, stroke: Stroke, fill: Color32, label: Option<(String, [f64; 2], Color32)>) -> Self {
         Self { kind, area, stroke, fill, label }
+    }
+
+    fn contains(&self, x: f64, y: f64) -> bool {
+        let mut inside = false;
+        let points = &self.area;
+        let n = points.len();
+        let mut j = n - 1;
+        for i in 0..n {
+            let xi = points[i][0];
+            let yi = points[i][1];
+            let xj = points[j][0];
+            let yj = points[j][1];
+            if (yi > y) != (yj > y)
+                && (x < (xj - xi) * (y - yi) / (yj - yi + f64::EPSILON) + xi)
+            {
+                inside = !inside;
+            }
+            j = i;
+        }
+        inside
+    }
+
+    fn name(&self) -> String {
+        match self.kind {
+            BackgroundZoneKind::RxZone => "Zone de réception".to_string(),
+            BackgroundZoneKind::Amplifier(label) => label.to_string(),
+            BackgroundZoneKind::JammingPlan => "Plan de brouillage du GPB".to_string(),
+        }
     }
 }
 
@@ -337,6 +365,21 @@ impl eframe::App for MyApp {
                                         task.time_start, task.time_end,
                                         task.freq_start, task.freq_end
                                     ));
+                                },
+                            );
+                            break;
+                        }
+                    }
+
+                    for zone in get_background_zones() {
+                        if zone.contains(data_pos.x, data_pos.y) {
+                            egui::show_tooltip_at_pointer(
+                                ui.ctx(),
+                                ui.layer_id(),
+                                ui.id().with("tooltip"),
+                                |ui| {
+                                    ui.set_min_width(70.);
+                                    ui.label(zone.name());
                                 },
                             );
                             break;
