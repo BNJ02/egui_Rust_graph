@@ -48,7 +48,7 @@ fn main() -> eframe::Result<()> {
 
 // Enumération des antennes disponibles
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Antenna {
+enum Amplifier {
     A20_500,
     A500_1000,
     A960_1215,
@@ -56,16 +56,79 @@ enum Antenna {
     A2400_6000,
 }
 
-impl Antenna {
+impl Amplifier {
     fn color(&self) -> Color32 {
         match self {
-            Antenna::A20_500 => Color32::from_rgba_unmultiplied(0, 187, 221, 255),
-            Antenna::A500_1000 => Color32::from_rgba_unmultiplied(174, 37, 115, 255),
-            Antenna::A960_1215 => Color32::from_rgba_unmultiplied(0, 171, 142, 255),
-            Antenna::A1000_2500 => Color32::from_rgba_unmultiplied(255, 163, 0, 255),
-            Antenna::A2400_6000 => Color32::from_rgba_unmultiplied(124, 127, 171, 255),
+            Amplifier::A20_500 => Color32::from_rgba_unmultiplied(0, 187, 221, 255),
+            Amplifier::A500_1000 => Color32::from_rgba_unmultiplied(174, 37, 115, 255),
+            Amplifier::A960_1215 => Color32::from_rgba_unmultiplied(0, 171, 142, 255),
+            Amplifier::A1000_2500 => Color32::from_rgba_unmultiplied(255, 163, 0, 255),
+            Amplifier::A2400_6000 => Color32::from_rgba_unmultiplied(124, 127, 171, 255),
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum BackgroundZoneKind {
+    JammingPlan,
+    RxZone,
+    Amplifier(&'static str),
+}
+
+struct BackgroundZone {
+    kind: BackgroundZoneKind,
+    area: Vec<[f64; 2]>,
+    stroke: Stroke,
+    fill: Color32,
+    label: Option<(String, [f64; 2], Color32)>,
+}
+
+impl BackgroundZone {
+    fn new(kind: BackgroundZoneKind, area: Vec<[f64; 2]>, stroke: Stroke, fill: Color32, label: Option<(String, [f64; 2], Color32)>) -> Self {
+        Self { kind, area, stroke, fill, label }
+    }
+}
+
+// Fonction pour obtenir les zones de fond du graphe
+// Ces zones représentent les différentes sections du plan de brouillage
+// et les antennes utilisées.
+fn get_background_zones() -> Vec<BackgroundZone> {
+    let mut zones = vec![
+        BackgroundZone::new(
+            BackgroundZoneKind::JammingPlan,
+            vec![[20., 0.], [6000., 0.], [6000., 1000.], [20., 1000.]],
+            Stroke::new(2., Color32::from_gray(255)),
+            Color32::from_rgba_unmultiplied(0, 0, 0, 0),
+            None,
+        ),
+        BackgroundZone::new(
+            BackgroundZoneKind::RxZone,
+            vec![[20., 0.], [6000., 0.], [6000., 100.], [20., 100.]],
+            Stroke::new(0.1, Color32::from_gray(100)),
+            Color32::from_rgba_unmultiplied(200, 200, 200, 100),
+            None,
+        ),
+    ];
+
+    let amplifiers = vec![
+        ("Antenne 20-500MHz", 20., 500., 1100., Color32::from_rgba_unmultiplied(0, 187, 221, 255)),
+        ("Antenne 500-1000MHz", 500., 1000., 1100., Color32::from_rgba_unmultiplied(174, 37, 115, 255)),
+        ("Antenne 960-1215MHz", 960., 1215., 1125., Color32::from_rgba_unmultiplied(0, 171, 142, 255)),
+        ("Antenne 1000-2500MHz", 1000., 2500., 1100., Color32::from_rgba_unmultiplied(255, 163, 0, 255)),
+        ("Antenne 2400-6000MHz", 2400., 6000., 1100., Color32::from_rgba_unmultiplied(124, 127, 171, 255)),
+    ];
+
+    for (label, f_start, f_end, height, color) in amplifiers {
+        zones.push(BackgroundZone::new(
+            BackgroundZoneKind::Amplifier(label),
+            vec![[f_start, 0.], [f_end, 0.], [f_end, height], [f_start, height]],
+            Stroke::new(1., color),
+            Color32::from_rgba_unmultiplied(0, 0, 0, 0),
+            Some((label.replace(" ", "\n"), [(f_start + f_end) / 2., if label == "Antenne 960-1215MHz" { height + 25. } else { height - 50. }], color)),
+        ));
+    }
+
+    zones
 }
 
 // Structure représentant une tâche dans le diagramme
@@ -75,12 +138,12 @@ struct Task {
     freq_end: f64,       // Fréquence de fin (MHz)
     time_start: f64,     // Temps de début (secondes)
     time_end: f64,       // Temps de fin (secondes)
-    antenna: Antenna,    // Antenne associée à la tâche
+    amplifier: Amplifier,    // Antenne associée à la tâche
 }
 
 impl Task {
     fn color(&self) -> Color32 {
-        self.antenna.color()
+        self.amplifier.color()
     }
 }
 
@@ -107,7 +170,7 @@ impl eframe::App for MyApp {
                     freq_end: 300.,
                     time_start: 0.,
                     time_end: 300.,
-                    antenna: Antenna::A20_500,
+                    amplifier: Amplifier::A20_500,
                 }),
                 1 => self.tasks.push(Task {
                     name: "Transmission".into(),
@@ -115,7 +178,7 @@ impl eframe::App for MyApp {
                     freq_end: 2500.,
                     time_start: 300.,
                     time_end: 600.,
-                    antenna: Antenna::A1000_2500,
+                    amplifier: Amplifier::A1000_2500,
                 }),
                 2 => {
                     if !self.tasks.is_empty() {
@@ -128,7 +191,7 @@ impl eframe::App for MyApp {
                     freq_end: 5500.,
                     time_start: 0.,
                     time_end: 1000.,
-                    antenna: Antenna::A2400_6000,
+                    amplifier: Amplifier::A2400_6000,
                 }),
                 4 => self.tasks.clear(),
                 _ => {}
@@ -173,6 +236,23 @@ impl eframe::App for MyApp {
                                 self.last_bounds_x = Some(new_bounds_x);
                             }
 
+                            // Afficher les zones de fond
+                            for zone in get_background_zones() {
+                                if let Some((text, pos, color)) = &zone.label {
+                                    plot_ui.text(egui_plot::Text::new(
+                                        text.clone(),
+                                        egui_plot::PlotPoint::new(pos[0], pos[1]),
+                                        egui::RichText::new(text).color(*color),
+                                    ));
+                                }
+                                plot_ui.polygon(
+                                    Polygon::new("zone", PlotPoints::from(zone.area.clone()))
+                                        .fill_color(zone.fill)
+                                        .stroke(zone.stroke),
+                                );
+                            }
+
+                            // Afficher les tâches
                             for task in &self.tasks {
                                 let rect = vec![
                                     [task.freq_start, task.time_start],
@@ -186,65 +266,11 @@ impl eframe::App for MyApp {
                                         .stroke(Stroke::new(0., Color32::TRANSPARENT)),
                                 );
                             }
-
-                            // Zone d'information
-                            let jamming_plan = vec![
-                                [20., 0.],
-                                [6000., 0.],
-                                [6000., 1000.],
-                                [20., 1000.],
-                            ];
-                            plot_ui.polygon(
-                                Polygon::new("Plan de brouillage du GPB", PlotPoints::from(jamming_plan))
-                                .fill_color(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 0))
-                                .stroke(Stroke::new(2., Color32::from_gray(255))),
-                            );
-
-                            // Zone des amplis-antennes
-                            let antennas = vec![
-                                ("Antenne 20-500MHz", 20., 500., 1100., Color32::from_rgba_unmultiplied(0, 187, 221, 255)),
-                                ("Antenne 500-1000MHz", 500., 1000., 1100., Color32::from_rgba_unmultiplied(174, 37, 115, 255)),
-                                ("Antenne 960-1215MHz", 960., 1215., 1125., Color32::from_rgba_unmultiplied(0, 171, 142, 255)),
-                                ("Antenne 1000-2500MHz", 1000., 2500., 1100., Color32::from_rgba_unmultiplied(255, 163, 0, 255)),
-                                ("Antenne 2400-6000MHz", 2400., 6000., 1100., Color32::from_rgba_unmultiplied(124, 127, 171, 255)),
-                            ];
-
-                            for (label, freq_start, freq_end, height, color) in antennas {
-                                let rect = vec![
-                                    [freq_start, 0.],
-                                    [freq_end, 0.],
-                                    [freq_end, height],
-                                    [freq_start, height],
-                                ];
-                                plot_ui.text(Text::new(
-                                    label,
-                                    PlotPoint::new((freq_start + freq_end) / 2., if label == "Antenne 960-1215MHz" { height + 25. } else { height - 50. }),
-                                    egui::RichText::new(label.replace(" ", "\n")),
-                                ).color(color));
-                                plot_ui.polygon(
-                                    Polygon::new(label, PlotPoints::from(rect))
-                                    .fill_color(egui::Color32::from_rgba_unmultiplied(0, 0, 0, 0))
-                                    .stroke(Stroke::new(1., color)),
-                                );
-                            }
-
-                            // Zone de Rx
-                            let rx_zone = vec![
-                                [20., 0.],
-                                [6000., 0.],
-                                [6000., 100.],
-                                [20., 100.],
-                            ];
-                            plot_ui.polygon(
-                                Polygon::new("Rx zone", PlotPoints::from(rx_zone))
-                                .fill_color(egui::Color32::from_rgba_unmultiplied(200, 200, 200, 100))
-                                .stroke(Stroke::new(0.1, Color32::from_gray(100))),
-                            );
                         });
                 });
 
                 // --- Espace entre les deux graphiques ---
-                ui.separator();
+                // ui.separator();
 
                 // --- Graphe secondaire ---
                 let label_tx_mini = self.label_tx.clone();
