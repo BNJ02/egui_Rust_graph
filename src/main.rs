@@ -34,6 +34,8 @@ fn main() -> eframe::Result<()> {
         label_rx: label_rx,
         step: 0,
         log_scale: false, // Indicateur pour l'échelle logarithmique
+        zoom_band: None, 
+        force_bounds_x: Some((20., 6000.)), // Optionnel : limites forcées pour le zoom
     };
 
     let options = eframe::NativeOptions {
@@ -175,6 +177,20 @@ struct MyApp {
     label_rx: Receiver<egui_plot::PlotPoint>, // Récepteur pour les étiquettes de points
     step: usize, // Étape de progression
     log_scale: bool, // Indicateur pour l'échelle logarithmique
+    zoom_band: Option<usize>,
+    force_bounds_x: Option<(f64, f64)>,
+}
+
+impl MyApp {
+    fn bands(&self) -> Vec<(Amplifier, f64, f64)> {
+        vec![
+            (Amplifier::A20_500, 20.0, 500.0),
+            (Amplifier::A500_1000, 500.0, 1000.0),
+            (Amplifier::A960_1215, 960.0, 1215.0),
+            (Amplifier::A1000_2500, 1000.0, 2500.0),
+            (Amplifier::A2400_6000, 2400.0, 6000.0),
+        ]
+    }
 }
 
 // Affichage principal
@@ -240,6 +256,23 @@ impl eframe::App for MyApp {
             ui.label(format!("{}", self.tasks.len()));
             ui.separator();
             ui.checkbox(&mut self.log_scale, "Échelle logarithmique sur X");
+            ui.separator();
+            ui.label("Zoom bande :");
+            for (i, (amp, start, end)) in self.bands().iter().enumerate() {
+                if ui.selectable_label(self.zoom_band == Some(i), format!("{:?}", amp)).clicked() {
+                    self.zoom_band = Some(i);
+                    let (xmin, xmax) = if self.log_scale {
+                        (start.log10(), end.log10())
+                    } else {
+                        (*start, *end)
+                    };
+                    self.force_bounds_x = Some((xmin, xmax));
+                }
+            }
+            if ui.selectable_label(self.zoom_band.is_none(), "Tout").clicked() {
+                self.zoom_band = None;
+                self.force_bounds_x = Some((if self.log_scale { 20_f64.log10() } else { 20. }, if self.log_scale { 6000_f64.log10() } else { 6000. }));
+            }
         });
 
         // Mise à jour de l'interface utilisateur
@@ -266,12 +299,10 @@ impl eframe::App for MyApp {
 
                 // --- Graphe principal ---
                 ui.allocate_ui(egui::vec2(ui.available_width(), main_height), |ui| {
-                    Plot::new("frequence_temps_plot_main")
+                    let mut main_plot = Plot::new("frequence_temps_plot_main")
                         .link_axis("groupe_x", [true, false])
                         .x_axis_formatter(formatter)
                         .y_axis_formatter(|y, _| format!("{:.1} ms", y.value))
-                        .include_x(if self.log_scale { 20_f64.log10() } else { 20. })
-                        .include_x(if self.log_scale { 6000_f64.log10() } else { 6000. })
                         .include_y(0.)
                         .include_y(1000.)
                         .x_grid_spacer(spacer)
@@ -279,68 +310,73 @@ impl eframe::App for MyApp {
                         .label_formatter(move |_name, value| {
                             let _ = label_tx_main.send(value.clone());
                             "".to_owned()
-                        })
-                        .show(ui, |plot_ui| {
-                            let bounds = plot_ui.plot_bounds();
-                            let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
-                            if self.last_bounds_x != Some(new_bounds_x) {
-                                self.plot_bounds_x = Some(new_bounds_x);
-                                self.last_bounds_x = Some(new_bounds_x);
-                            }
-
-                            for zone in get_background_zones() {
-                                if let Some((text, pos, color)) = &zone.label {
-                                    let pos_x = if self.log_scale { pos[0].log10() } else { pos[0] };
-                                    plot_ui.text(egui_plot::Text::new(
-                                        text.clone(),
-                                        egui_plot::PlotPoint::new(pos_x, pos[1]),
-                                        egui::RichText::new(text).color(*color),
-                                    ));
-                                }
-
-                                let transformed_area: Vec<[f64; 2]> = if self.log_scale {
-                                    zone.area.iter().map(|[x, y]| [x.log10(), *y]).collect()
-                                } else {
-                                    zone.area.clone()
-                                };
-
-                                plot_ui.polygon(
-                                    Polygon::new("zone", PlotPoints::from(transformed_area))
-                                        .fill_color(zone.fill)
-                                        .stroke(zone.stroke),
-                                );
-                            }
-
-                            let hline = if self.log_scale {
-                                vec![[20_f64.log10(), 1000.], [6000_f64.log10(), 1000.]]
-                            } else {
-                                vec![[20., 1000.], [6000., 1000.]]
-                            };
-                            plot_ui.line(
-                                egui_plot::Line::new("horizontal_line", PlotPoints::from(hline))
-                                    .stroke(Stroke::new(1.0, Color32::from_gray(100))),
-                            );
-
-                            for task in &self.tasks {
-                                let (x0, x1) = if self.log_scale {
-                                    (task.freq_start.log10(), task.freq_end.log10())
-                                } else {
-                                    (task.freq_start, task.freq_end)
-                                };
-
-                                let rect = vec![
-                                    [x0, task.time_start],
-                                    [x1, task.time_start],
-                                    [x1, task.time_end],
-                                    [x0, task.time_end],
-                                ];
-                                plot_ui.polygon(
-                                    Polygon::new(&task.name, PlotPoints::from(rect))
-                                        .fill_color(task.color())
-                                        .stroke(Stroke::new(0., Color32::TRANSPARENT)),
-                                );
-                            }
                         });
+
+                    if let Some((xmin, xmax)) = self.force_bounds_x.take() {
+                        main_plot = main_plot.default_x_bounds(xmin, xmax);
+                    }
+                                            
+                    main_plot.show(ui, |plot_ui| {
+                        let bounds = plot_ui.plot_bounds();
+                        let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
+                        if self.last_bounds_x != Some(new_bounds_x) {
+                            self.plot_bounds_x = Some(new_bounds_x);
+                            self.last_bounds_x = Some(new_bounds_x);
+                        }
+
+                        for zone in get_background_zones() {
+                            if let Some((text, pos, color)) = &zone.label {
+                                let pos_x = if self.log_scale { pos[0].log10() } else { pos[0] };
+                                plot_ui.text(egui_plot::Text::new(
+                                    text.clone(),
+                                    egui_plot::PlotPoint::new(pos_x, pos[1]),
+                                    egui::RichText::new(text).color(*color),
+                                ));
+                            }
+
+                            let transformed_area: Vec<[f64; 2]> = if self.log_scale {
+                                zone.area.iter().map(|[x, y]| [x.log10(), *y]).collect()
+                            } else {
+                                zone.area.clone()
+                            };
+
+                            plot_ui.polygon(
+                                Polygon::new("zone", PlotPoints::from(transformed_area))
+                                    .fill_color(zone.fill)
+                                    .stroke(zone.stroke),
+                            );
+                        }
+
+                        let hline = if self.log_scale {
+                            vec![[20_f64.log10(), 1000.], [6000_f64.log10(), 1000.]]
+                        } else {
+                            vec![[20., 1000.], [6000., 1000.]]
+                        };
+                        plot_ui.line(
+                            egui_plot::Line::new("horizontal_line", PlotPoints::from(hline))
+                                .stroke(Stroke::new(1.0, Color32::from_gray(100))),
+                        );
+
+                        for task in &self.tasks {
+                            let (x0, x1) = if self.log_scale {
+                                (task.freq_start.log10(), task.freq_end.log10())
+                            } else {
+                                (task.freq_start, task.freq_end)
+                            };
+
+                            let rect = vec![
+                                [x0, task.time_start],
+                                [x1, task.time_start],
+                                [x1, task.time_end],
+                                [x0, task.time_end],
+                            ];
+                            plot_ui.polygon(
+                                Polygon::new(&task.name, PlotPoints::from(rect))
+                                    .fill_color(task.color())
+                                    .stroke(Stroke::new(0., Color32::TRANSPARENT)),
+                            );
+                        }
+                    });
                 });
 
                 // --- Graphe secondaire ---
