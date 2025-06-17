@@ -1,3 +1,9 @@
+//! Module principal de l'application Gantt interactive en fréquence/temps.
+//!
+//! Ce module contient la structure [`MyApp`] qui implémente [`eframe::App`].
+//! Il orchestre l'interface utilisateur (UI), les données affichées, le traitement
+//! des événements de zoom et d'échelle logarithmique, et l'affichage des tâches et des zones.
+
 use crate::utils::*;
 use crate::task::*;
 use crate::background::*;
@@ -9,25 +15,39 @@ use std::sync::mpsc::{Receiver, Sender, channel};
 use std::thread;
 use std::time::Duration;
 
+/// Application principale représentant un diagramme de Gantt fréquentiel et temporel.
 pub struct MyApp {
+    /// Liste des tâches à afficher dans le diagramme.
     pub tasks: Vec<Task>,
+    /// Limites actuelles de la vue en X (bande fréquentielle).
     pub plot_bounds_x: Option<(f64, f64)>,
+    /// Dernière valeur connue des limites X (pour détection de changement).
     pub last_bounds_x: Option<(f64, f64)>,
+    /// Canal de réception d'un pas d'exécution cyclique.
     pub receiver: Receiver<usize>,
+    /// Émetteur pour transmettre la position du curseur sur le graphique.
     pub label_tx: Sender<PlotPoint>,
+    /// Récepteur associé au canal d'envoi du curseur.
     pub label_rx: Receiver<PlotPoint>,
+    /// Étape actuelle (0 à 4) du cycle de démonstration.
     pub step: usize,
+    /// Indique si le mode logarithmique était actif précédemment.
     pub old_log_scale: bool,
+    /// Indique si l'affichage utilise l'échelle logarithmique des fréquences.
     pub log_scale: bool,
+    /// Indice de la bande d'amplification actuellement zoomée (si zoom actif).
     pub zoom_band: Option<usize>,
+    /// Si défini, force l'application de limites X spécifiques.
     pub force_bounds_x: Option<(f64, f64)>,
 }
 
 impl MyApp {
+    /// Crée une nouvelle instance de l'application `MyApp` et démarre un thread d'animation cyclique.
     pub fn new() -> Self {
         let (tx, rx) = channel();
         let (label_tx, label_rx) = channel();
 
+        // Thread de démonstration : change de scénario toutes les 2 secondes
         thread::spawn(move || {
             let mut step = 0;
             loop {
@@ -54,6 +74,7 @@ impl MyApp {
         }
     }
 
+    /// Renvoie les bandes de fréquence associées à chaque amplificateur.
     pub fn bands(&self) -> Vec<(Amplifier, f64, f64)> {
         vec![
             (Amplifier::A20_500, 20.0, 500.0),
@@ -64,6 +85,9 @@ impl MyApp {
         ]
     }
 
+    /// Met à jour les tâches affichées en fonction de l'étape courante.
+    ///
+    /// Ce mécanisme est utilisé à des fins de démonstration ou de test.
     pub fn update_tasks(&mut self, step: usize) {
         match step {
             0 => self.tasks.push(Task {
@@ -97,21 +121,29 @@ impl MyApp {
     }
 }
 
+/// Implémentation de l’interface [`eframe::App`] pour `MyApp`
+///
+/// Cette méthode est appelée à chaque frame pour rendre l’interface utilisateur.
+/// Elle gère l’affichage du graphique principal, du mini graphe, des contrôles,
+/// ainsi que les interactions avec les utilisateurs.
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Mise à jour des tâches en fonction de l'étape actuelle
         if let Ok(step) = self.receiver.try_recv() {
             self.step = step;
             self.update_tasks(step);
         }
 
+        // Mise à jour des limites X du graphe principal
         if self.log_scale != self.old_log_scale {
             self.old_log_scale = self.log_scale;
             self.zoom_band = None;
             self.force_bounds_x = Some(get_bounds(self.log_scale));
         }
 
-        ctx.request_repaint();
+        ctx.request_repaint(); // Demande de rafraîchissement de l'interface
 
+        // Affichage du panneau latéral avec les contrôles
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
             ui.heading("Contrôles");
             ui.label(format!("Nombre de tâches : {}", self.tasks.len()));
@@ -136,12 +168,15 @@ impl eframe::App for MyApp {
             }
         });
 
+        // Affichage du panneau central avec le graphe principal et le mini graphe
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let total_height = ui.available_height();
                 let main_height = total_height * 0.8;
                 let mini_height = total_height * 0.18;
 
+                // Si le mode logarithmique est activé, on utilise un espacement logarithmique pour les grilles
+                // Sinon, on utilise un espacement uniforme basé sur les bandes d'amplification
                 let spacer = if self.log_scale {
                     log_grid_spacer(10)
                 } else {
@@ -171,10 +206,12 @@ impl eframe::App for MyApp {
                             "".into()
                         });
 
+                    // Si le mode logarithmique est activé, on utilise un espacement logarithmique pour l'axe X
                     if let Some((xmin, xmax)) = self.force_bounds_x.take() {
                         plot = plot.default_x_bounds(xmin, xmax);
                     }
 
+                    // Affichage du graphe principal
                     plot.show(ui, |plot_ui| {
                         let bounds = plot_ui.plot_bounds();
                         let new_bounds_x = (bounds.min()[0], bounds.max()[0]);
@@ -183,6 +220,7 @@ impl eframe::App for MyApp {
                             self.last_bounds_x = Some(new_bounds_x);
                         }
 
+                        // Affichage des zones de fond
                         for zone in get_background_zones() {
                             let area = if self.log_scale {
                                 zone.area.iter().map(|[x, y]| [x.log10(), *y]).collect()
@@ -200,6 +238,7 @@ impl eframe::App for MyApp {
                             }
                         }
 
+                        // Affichage de la ligne horizontale pour la limite de temps
                         let hline = if self.log_scale {
                             vec![[MIN_FREQ.log10(), MAX_TIME], [MAX_FREQ.log10(), MAX_TIME]]
                         } else {
@@ -207,6 +246,7 @@ impl eframe::App for MyApp {
                         };
                         plot_ui.line(Line::new("hline", PlotPoints::from(hline)).stroke(Stroke::new(1.0, Color32::GRAY)));
 
+                        // Affichage des tâches
                         for task in &self.tasks {
                             let poly = Polygon::new(&task.name, PlotPoints::from(task.rect(self.log_scale)))
                                 .fill_color(task.color())
@@ -242,15 +282,16 @@ impl eframe::App for MyApp {
                         });
                 });
 
-                // Tooltip interactif
+                // Tooltips interactifs
                 if let Ok(data_pos) = self.label_rx.try_recv() {
                     let hovered_freq = if self.log_scale {
                         10f64.powf(data_pos.x)
                     } else {
                         data_pos.x
                     };
-
                     let mut task_hovered = false;
+
+                    // Tooltip pour les tâches
                     for task in &self.tasks {
                         if hovered_freq >= task.freq_start && hovered_freq <= task.freq_end
                             && data_pos.y >= task.time_start && data_pos.y <= task.time_end {
@@ -271,6 +312,7 @@ impl eframe::App for MyApp {
                         }
                     }
 
+                    // Tooltip pour les zones de fond si aucune tâche n'est survolée
                     if !task_hovered {
                         let zones: Vec<String> = get_background_zones()
                             .into_iter()
@@ -278,6 +320,7 @@ impl eframe::App for MyApp {
                             .map(|z| z.name())
                             .collect();
 
+                        // Affichage des zones de fond si elles sont survolées
                         if !zones.is_empty() {
                             egui::show_tooltip_at_pointer(ctx, ui.layer_id(), ui.id().with("tooltip"), |ui| {
                                 ui.set_min_width(80.);
@@ -287,6 +330,7 @@ impl eframe::App for MyApp {
                             });
                         }
 
+                        // Affichage des coordonnées du curseur dans tous les cas
                         egui::show_tooltip_at_pointer(
                             ui.ctx(),
                             ui.layer_id(),
