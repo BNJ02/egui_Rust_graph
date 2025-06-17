@@ -33,6 +33,7 @@ fn main() -> eframe::Result<()> {
         label_tx: label_tx,
         label_rx: label_rx,
         step: 0,
+        old_log_scale: false, // Ancienne valeur de l'échelle logarithmique
         log_scale: false, // Indicateur pour l'échelle logarithmique
         zoom_band: None, 
         force_bounds_x: Some((20., 6000.)), // Optionnel : limites forcées pour le zoom
@@ -176,6 +177,7 @@ struct MyApp {
     label_tx: Sender<egui_plot::PlotPoint>,
     label_rx: Receiver<egui_plot::PlotPoint>, // Récepteur pour les étiquettes de points
     step: usize, // Étape de progression
+    old_log_scale: bool, // Ancienne valeur de l'échelle logarithmique
     log_scale: bool, // Indicateur pour l'échelle logarithmique
     zoom_band: Option<usize>,
     force_bounds_x: Option<(f64, f64)>,
@@ -236,26 +238,21 @@ impl eframe::App for MyApp {
         // Demande de rafraîchissement de l'interface
         ctx.request_repaint();
 
+        // Détecte changement d’échelle
+        if self.log_scale != self.old_log_scale {
+            self.old_log_scale = self.log_scale;
+            self.zoom_band = None;
+            self.force_bounds_x = Some(match self.zoom_band {
+                Some(i) => { let (_, _s,_e) = self.bands()[i]; (if self.log_scale { 20_f64.log10() } else { 20. }, if self.log_scale { 6000_f64.log10() } else { 6000. }) }
+                None => (if self.log_scale { 20_f64.log10() } else { 20. }, if self.log_scale { 6000_f64.log10() } else { 6000. })
+            });
+        }
+
         egui::SidePanel::left("side_panel").show(ctx, |ui| {
-            ui.heading("Actions");
-            if ui.button("Ajouter une tâche").clicked() {
-                self.tasks.push(Task {
-                    name: format!("Tâche {}", self.tasks.len() + 1),
-                    freq_start: 1000.,
-                    freq_end: 2000.,
-                    time_start: 100. * (self.tasks.len() as f64),
-                    time_end: 100. * (self.tasks.len() as f64 + 1.),
-                    amplifier: Amplifier::A1000_2500,
-                });
-            }
-            if ui.button("Effacer les tâches").clicked() {
-                self.tasks.clear();
-            }
-            ui.separator();
             ui.label("Nombre de tâches :");
             ui.label(format!("{}", self.tasks.len()));
             ui.separator();
-            ui.checkbox(&mut self.log_scale, "Échelle logarithmique sur X");
+            ui.checkbox(&mut self.log_scale, "Échelle logarithmique");
             ui.separator();
             ui.label("Zoom bande :");
             for (i, (amp, start, end)) in self.bands().iter().enumerate() {
