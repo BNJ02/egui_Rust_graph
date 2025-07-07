@@ -81,8 +81,8 @@ impl BackgroundZone {
     }
 }
 
-use crate::task::Amplifier;
-use crate::utils::{MIN_FREQ, MAX_FREQ};
+use crate::interface::task::Amplifier;
+use crate::interface::utils::{MIN_FREQ, MAX_FREQ};
 
 /// Construit la liste des zones de fond à afficher dans le graphe.
 ///

@@ -4,9 +4,9 @@
 //! Il orchestre l'interface utilisateur (UI), les données affichées, le traitement
 //! des événements de zoom et d'échelle logarithmique, et l'affichage des tâches et des zones.
 
-use crate::utils::*;
-use crate::task::*;
-use crate::background::*;
+use crate::interface::utils::*;
+use crate::interface::task::*;
+use crate::interface::background::*;
 
 use eframe::egui;
 use egui::{Color32, Stroke, RichText};

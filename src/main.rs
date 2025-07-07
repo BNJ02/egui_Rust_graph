@@ -1,12 +1,13 @@
 /// Module gérant les zones de fond du graphe (background).
-mod background;
-/// Module définissant la struct Task et l'énum Amplifier.
-mod task;
-/// Module contenant les constantes et utilitaires (get_bounds, etc.).
-mod utils;
+mod interface {
+    pub mod background;
+    pub mod task;
+    pub mod utils;
+    pub mod app;
+}
 
-mod app;
-use app::MyApp;
+// mod interface::app;
+use interface::app::MyApp;
 
 /// Point d’entrée de l’application : initialise l’UI eframe et lance le rendu.
 ///
